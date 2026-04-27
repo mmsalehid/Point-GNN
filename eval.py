@@ -5,7 +5,7 @@ import time
 import argparse
 
 import numpy as np
-import tensorflow as tf
+from util.tf_compat import tf
 
 from dataset.kitti_dataset import KittiDataset
 from models.graph_gen import get_graph_generate_fn

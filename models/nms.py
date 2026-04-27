@@ -112,7 +112,7 @@ def bboxes_nms(classes, scores, bboxes, nms_threshold=0.45,
     boxes_corners = boxes_3d_to_corners(bboxes)
     # convert to pixels
     boxes_corners = np.int32(boxes_corners*appr_factor)
-    keep_bboxes = np.ones(scores.shape, dtype=np.bool)
+    keep_bboxes = np.ones(scores.shape, dtype=bool)
     for i in range(scores.size-1):
         if keep_bboxes[i]:
             # Computer overlap with bboxes which are following.
@@ -139,7 +139,7 @@ def bboxes_nms_uncertainty(classes, scores, bboxes, scores_threshold=0.25,
     # boxes_corners = bboxes
     # convert to pixels
     # boxes_corners = np.int32(boxes_corners*appr_factor)
-    keep_bboxes = np.ones(scores.shape, dtype=np.bool)
+    keep_bboxes = np.ones(scores.shape, dtype=bool)
     for i in range(scores.size-1):
         if keep_bboxes[i]:
             # Only compute on the rest of bboxes
@@ -176,7 +176,7 @@ def bboxes_nms_merge_only(classes, scores, bboxes, scores_threshold=0.25,
     """
     boxes_corners = boxes_3d_to_corners(bboxes)
     # convert to pixels
-    keep_bboxes = np.ones(scores.shape, dtype=np.bool)
+    keep_bboxes = np.ones(scores.shape, dtype=bool)
     for i in range(scores.size-1):
         if keep_bboxes[i]:
             # Only compute on the rest of bboxes
@@ -208,7 +208,7 @@ def bboxes_nms_score_only(classes, scores, bboxes, scores_threshold=0.25,
     """
     boxes_corners = boxes_3d_to_corners(bboxes)
     # convert to pixels
-    keep_bboxes = np.ones(scores.shape, dtype=np.bool)
+    keep_bboxes = np.ones(scores.shape, dtype=bool)
     for i in range(scores.size-1):
         if keep_bboxes[i]:
             # Only compute on the rest of bboxes

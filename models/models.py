@@ -2,8 +2,9 @@
 
 from functools import partial
 
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
+from util.tf_compat import tf
+
+import tf_slim as slim
 
 from models.loss import focal_loss_sigmoid, focal_loss_softmax
 from models import gnn
@@ -232,7 +233,6 @@ class MultiLayerFastLocalGraphModelV2(object):
         batch_idx = tf.concat([batch_idx, labels], axis=1)
         pred_box = tf.gather_nd(pred_box, batch_idx)
         pred_box = tf.expand_dims(pred_box, axis=1)
-        #pred_box = tf.batch_gather(pred_box, labels)
         if loc_loss_type == 'huber_loss':
             all_loc_loss = loc_loss_weight*tf.losses.huber_loss(
                 gt_box,
@@ -251,7 +251,7 @@ class MultiLayerFastLocalGraphModelV2(object):
                 all_loc_loss = all_loc_loss*classwise_loc_loss_weight
             num_valid_endpoint = tf.reduce_sum(valid_box)
             mean_loc_loss = tf.reduce_mean(all_loc_loss, axis=1)
-            loc_loss = tf.div_no_nan(tf.reduce_sum(mean_loc_loss),
+            loc_loss = tf.math.divide_no_nan(tf.reduce_sum(mean_loc_loss),
                 num_valid_endpoint)
             classwise_loc_loss = []
             for class_idx in range(self.num_classes):
@@ -259,7 +259,7 @@ class MultiLayerFastLocalGraphModelV2(object):
                     tf.constant(class_idx, tf.int32)))
                 l = tf.reduce_sum(tf.gather(all_loc_loss, class_mask), axis=0)
                 l = tf.squeeze(l, axis=0)
-                is_nan_mask = tf.is_nan(l)
+                is_nan_mask = tf.math.is_nan(l)
                 l = tf.where(is_nan_mask, tf.zeros_like(l),l)
                 classwise_loc_loss.append(l)
             loss_dict['classwise_loc_loss'] = classwise_loc_loss
@@ -286,7 +286,7 @@ class MultiLayerFastLocalGraphModelV2(object):
             valid_box = tf.squeeze(valid_box, axis=1)
             top_k_valid_box = tf.gather(valid_box, top_k_indices)
             num_valid_endpoint = tf.reduce_sum(top_k_valid_box)
-            loc_loss = tf.div_no_nan(tf.reduce_sum(top_k_loc_loss),
+            loc_loss = tf.math.divide_no_nan(tf.reduce_sum(top_k_loc_loss),
                 num_valid_endpoint)
             top_k_labels = tf.gather(labels, top_k_indices)
             all_top_k_loc_loss = tf.gather(all_loc_loss, top_k_indices)
@@ -297,12 +297,12 @@ class MultiLayerFastLocalGraphModelV2(object):
                 l = tf.reduce_sum(tf.gather(all_top_k_loc_loss, class_mask),
                     axis=0)
                 l = tf.squeeze(l, axis=0)
-                is_nan_mask = tf.is_nan(l)
+                is_nan_mask = tf.math.is_nan(l)
                 l = tf.where(is_nan_mask, tf.zeros_like(l),l)
                 classwise_loc_loss.append(l)
             loss_dict['classwise_loc_loss'] = classwise_loc_loss
 
-        with tf.control_dependencies([tf.assert_equal(tf.is_nan(loc_loss),
+        with tf.control_dependencies([tf.assert_equal(tf.math.is_nan(loc_loss),
         False)]):
             reg_loss = tf.reduce_sum(tf.losses.get_regularization_losses())
         loss_dict.update({'cls_loss': cls_loss, 'loc_loss': loc_loss,

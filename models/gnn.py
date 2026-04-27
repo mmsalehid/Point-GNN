@@ -2,14 +2,15 @@
 
 from functools import partial
 
-import tensorflow as tf
+from util.tf_compat import tf
+
 import numpy as np
-import tensorflow.contrib.slim as slim
+import tf_slim as slim
 
 def instance_normalization(features):
     with tf.variable_scope(None, default_name='IN'):
         mean, variance = tf.nn.moments(
-            features, [0], name='IN_stats', keep_dims=True)
+            features, [0], name='IN_stats', keepdims=True)
         features = tf.nn.batch_normalization(
             features, mean, variance, None, None, 1e-12, name='IN_apply')
     return(features)

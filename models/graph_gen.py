@@ -5,8 +5,7 @@ import random
 
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
-import open3d
-import tensorflow as tf
+from util import open3d_compat as open3d
 
 def multi_layer_downsampling(points_xyz, base_voxel_size, levels=[1],
     add_rnd3d=False,):

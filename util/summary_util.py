@@ -1,7 +1,8 @@
 """This file implements utility functions for tensorflow summary."""
 
-import tensorflow as tf
 from tensorboard import summary as summary_lib
+
+from util.tf_compat import tf
 
 def write_summary_scale(key, value, global_step, summary_dir):
     """Write a scale summary to summary_dir. """

@@ -341,7 +341,7 @@ def dilute_background(cam_rgb_points, labels, dilute_voxel_base=0.4,
     ],
     ):
     xyz = cam_rgb_points.xyz
-    mask = np.zeros(xyz.shape[0], dtype=np.bool)
+    mask = np.zeros(xyz.shape[0], dtype=bool)
 
     labels_no_dontcare = []
     for label in labels:
@@ -395,7 +395,7 @@ def remove_background(cam_rgb_points, labels, expend_factor=(4.0, 4.0, 4.0),
     mask_random_jitter_stds = (0., 0., 0., 0., 0., 0.)
     ):
     xyz = cam_rgb_points.xyz
-    mask = np.zeros(xyz.shape[0], dtype=np.bool)
+    mask = np.zeros(xyz.shape[0], dtype=bool)
 
     labels_no_dontcare = []
     for label in labels:

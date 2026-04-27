@@ -8,7 +8,7 @@ import random
 from collections import namedtuple, defaultdict
 
 import numpy as np
-import open3d
+from util import open3d_compat as open3d
 import cv2
 
 Points = namedtuple('Points', ['xyz', 'attr'])
@@ -1092,7 +1092,7 @@ class KittiDataset(object):
             #     # only draw 3D bounding box for objects in front of the camera
             #     continue
             img_points = self.cam_points_to_image(cam_points, calib)
-            img_points_xy = img_points.xyz[:, 0:2].astype(np.int)
+            img_points_xy = img_points.xyz[:, 0:2].astype(int)
             color = color_map[label['name']][::-1]
             cv2.line(image, tuple(img_points_xy[0,:]),
                 tuple(img_points_xy[1,:]),color,2)

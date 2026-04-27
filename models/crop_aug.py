@@ -4,7 +4,7 @@ import os
 import json
 
 import numpy as np
-import open3d
+from util import open3d_compat as open3d
 from copy import deepcopy
 from tqdm import tqdm
 

@@ -1,4 +1,4 @@
-import tensorflow as tf
+from util.tf_compat import tf
 
 def average_gradients(tower_grads):
   """Calculate the average gradient for each shared variable across all towers.

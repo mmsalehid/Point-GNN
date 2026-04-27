@@ -7,11 +7,11 @@ import multiprocessing
 from functools import partial
 
 import numpy as np
-import tensorflow as tf
-import open3d
+from util.tf_compat import tf
 import cv2
 from tqdm import tqdm
 
+from util import open3d_compat as open3d
 from dataset.kitti_dataset import KittiDataset, Points
 from models.graph_gen import get_graph_generate_fn
 from models.models import get_model

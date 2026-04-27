@@ -1,6 +1,6 @@
 """Implements popular losses. """
 
-import tensorflow as tf
+from util.tf_compat import tf
 
 def focal_loss_sigmoid(labels, logits, alpha=0.5, gamma=2):
     """
@@ -44,7 +44,7 @@ def focal_loss_softmax(labels, logits, gamma=2):
         labels=tf.squeeze(labels, axis=1), logits=logits)
     cross_ent = tf.expand_dims(cross_ent, 1)
     labels = tf.cast(labels, tf.int32)
-    L=((1.0-tf.batch_gather(y_pred, labels))**gamma)*cross_ent
+    L=((1.0-tf.gather(y_pred, labels, batch_dims=1))**gamma)*cross_ent
     return L
 
 def test_focal_loss():

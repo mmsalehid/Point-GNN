@@ -17,19 +17,21 @@ year = {2020}
 
 ### Prerequisites
 
-We use Tensorflow 1.15 for this implementation. Please [install CUDA](https://developer.nvidia.com/cuda-10.0-download-archive) if you want GPU support.   
+This codebase now runs its original TensorFlow 1.x graph code through
+TensorFlow 2.x compatibility mode. Use Python 3.10 or newer and install the
+dependencies from `requirements.txt`:
+
 ```
-pip3 install --user tensorflow-gpu==1.15.0
+python3 -m pip install -r requirements.txt
 ```
 
-To install other dependencies: 
-```
-pip3 install --user opencv-python
-pip3 install --user open3d-python==0.7.0.0
-pip3 install --user scikit-learn
-pip3 install --user tqdm
-pip3 install --user shapely
-```
+The dependency file uses TensorFlow 2.15 for Python 3.10/3.11 and TensorFlow
+2.16 plus `tf-keras` for Python 3.12. The old `tensorflow-gpu==1.15.0` package
+is no longer needed; recent TensorFlow Linux GPU installs use the unified
+`tensorflow` package. If you need CUDA support, follow the TensorFlow install
+guide for the TensorFlow version and platform you are using.
+
+`open3d-python==0.7.0.0` has also been replaced by the modern `open3d` package.
 
 ### KITTI Dataset
 
@@ -165,5 +167,4 @@ tensorboard --logdir=./train_dir
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
-
 

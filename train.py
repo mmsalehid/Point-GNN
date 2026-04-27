@@ -8,7 +8,7 @@ from sys import getsizeof
 from multiprocessing import Pool, Queue, Process
 
 import numpy as np
-import tensorflow as tf
+from util.tf_compat import tf
 
 from dataset.kitti_dataset import KittiDataset
 from models.graph_gen import get_graph_generate_fn
@@ -270,12 +270,12 @@ if 'unify_copies' in train_config:
         total_num_valid_endpoints = tf.reduce_sum([t['t_num_valid_endpoint']
             for t in input_tensor_sets])
         for ti in range(len(input_tensor_sets)):
-            weight = tf.div_no_nan(
+            weight = tf.math.divide_no_nan(
                 tf.cast(len(input_tensor_sets)*input_tensor_sets[ti][
                     't_num_endpoint'], tf.float32),
                 tf.cast(total_num_endpoints, tf.float32))
             weight = tf.cast(weight, tf.float32)
-            valid_weight = tf.div_no_nan(
+            valid_weight = tf.math.divide_no_nan(
                 tf.cast(len(input_tensor_sets)*input_tensor_sets[ti][
                     't_num_valid_endpoint'], tf.float32),
                 tf.cast(total_num_valid_endpoints, tf.float32))
