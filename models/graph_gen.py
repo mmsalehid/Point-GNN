@@ -41,6 +41,21 @@ def multi_layer_downsampling(points_xyz, base_voxel_size, levels=[1],
                 pcd.points = open3d.Vector3dVector(points_xyz)
                 downsampled_xyz = np.asarray(open3d.voxel_down_sample(
                     pcd, voxel_size = base_voxel_size*level).points)
+                '''
+                Visualization from a dense cloud to downsampled cloud
+                '''
+                pcd_raw = open3d.PointCloud()
+                pcd_raw.points = open3d.Vector3dVector(points_xyz)
+
+                pcd_down = open3d.PointCloud()
+                pcd_down.points = open3d.Vector3dVector(downsampled_xyz)
+
+                print("Raw points:", len(points_xyz))
+                print("Downsampled points:", len(downsampled_xyz))
+
+                #open3d.draw_geometries([pcd_raw])
+                #open3d.draw_geometries([pcd_down])
+
                 downsampled_list.append(downsampled_xyz)
         last_level = level
     return downsampled_list
@@ -191,6 +206,28 @@ def gen_multi_level_local_graph_v3(
         center_xyz = vertex_coord_list[graph_level+1]
         vertices = gen_graph_fn(points_xyz, center_xyz, **method_kwarg)
         edges_list.append(vertices)
+        ''' Visualization of the graph edges
+        print("========== GRAPH VISUALIZATION ==========")
+        print("Points:", len(points_xyz))
+        print("Centers:", len(center_xyz))
+        print("Edges:", len(vertices))
+        print("Average neighbors per center:",len(vertices) / len(center_xyz) if len(center_xyz) > 0 else 0)
+        '''
+    # Create point cloud (source points)
+        pcd = open3d.PointCloud()
+        pcd.points = open3d.Vector3dVector(points_xyz)
+
+    # Create graph edges (limit to first 2000 to avoid red overload)
+        line_set = open3d.LineSet()
+        line_set.points = open3d.Vector3dVector(points_xyz)
+        num_edges_to_show = min(2000, len(vertices))
+        line_set.lines = open3d.Vector2iVector(vertices[:num_edges_to_show, :2])
+        colors = [[1, 0, 0] for _ in range(num_edges_to_show)]
+        line_set.colors = open3d.Vector3dVector(colors)
+
+    # Visualize together
+        #open3d.draw_geometries([pcd, line_set])
+    # ======================================
     return vertex_coord_list, keypoint_indices_list, edges_list
 
 def gen_disjointed_rnn_local_graph_v3(
