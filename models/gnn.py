@@ -354,18 +354,20 @@ class GraphNetAutoCenter(object):
             input_vertex_coordinates = input_vertex_coordinates + offset
         # Gather the destination vertex of the edges
         d_vertex_coordinates = tf.gather(input_vertex_coordinates, edges[:, 1])
-        print("Gathered source features:", s_vertex_features.shape)
+        #print("Gathered source features:", s_vertex_features.shape)
         # Prepare initial edge features
         edge_features = tf.concat(
             [s_vertex_features, s_vertex_coordinates - d_vertex_coordinates],
              axis=-1)
         # --- DEBUG PRINT 2 (after concat, replace old print) ---
+        '''
         print("\n========== CONCAT ==========")
         print("Source coordinate shape:", s_vertex_coordinates.shape)
         print("Destination coordinate shape:", d_vertex_coordinates.shape)
         print("Relative offset shape:",
               (s_vertex_coordinates - d_vertex_coordinates).shape)
         print("Final edge feature shape:", edge_features.shape)
+        '''
 
         with tf.variable_scope('extract_vertex_features'):
             # Extract edge features
@@ -381,9 +383,11 @@ class GraphNetAutoCenter(object):
                 edges[:, 1],
                 tf.shape(input_vertex_features)[0])
             # --- DEBUG PRINT 3 (after scatter max) ---
+            '''
             print("\n========== SCATTER MAX ==========")
             print("Aggregated feature shape:",
                   aggregated_edge_features.shape)
+            '''
 
         # Update vertex features
         with tf.variable_scope('combined_features'):
@@ -393,8 +397,9 @@ class GraphNetAutoCenter(object):
                 activation_type=update_MLP_activation_type)
         output_vertex_features = update_features + input_vertex_features
         # --- DEBUG PRINT 4 (before return) ---
+        '''
         print("\n========== UPDATE ==========")
         print("Updated vertex feature shape:",
               output_vertex_features.shape)
-
+        '''
         return output_vertex_features
