@@ -4,9 +4,9 @@ Point-GNN Benchmarking v3 — Full System Profiling
 - TF Timeline on EVERY frame
 - Four-category taxonomy: Sparse / Dense / Memory / Other
 - Per-frame normalization then mean
-- CPU-only wall-clock timing
+- CPU wall-clock timing
 - Full pipeline: graph construction + inference + post-processing
-- No error bars — descriptive benchmarking only
+- Mean/average results only — no per-frame plots
 """
 
 import os
@@ -32,19 +32,18 @@ from models import graph_gen
 
 # ── Args ───────────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()
-parser.add_argument('checkpoint_path',    type=str)
-parser.add_argument('--test',             dest='test',
-                    action='store_true',  default=False)
-parser.add_argument('--no-box-merge',     dest='use_box_merge',
-                    action='store_false', default=True)
-parser.add_argument('--no-box-score',     dest='use_box_score',
-                    action='store_false', default=True)
-parser.add_argument('--dataset_root_dir', type=str,
+parser.add_argument('checkpoint_path',      type=str)
+parser.add_argument('--test',               dest='test',
+                    action='store_true',    default=False)
+parser.add_argument('--no-box-merge',       dest='use_box_merge',
+                    action='store_false',   default=True)
+parser.add_argument('--no-box-score',       dest='use_box_score',
+                    action='store_false',   default=True)
+parser.add_argument('--dataset_root_dir',   type=str,
                     default='../dataset/kitti/')
 parser.add_argument('--dataset_split_file', type=str, default='')
-parser.add_argument('--output_dir',       type=str, default='')
-parser.add_argument('--benchmark_frames', type=int, default=10)
-parser.add_argument('--spmm_vis_frames',  type=int, default=5)
+parser.add_argument('--output_dir',         type=str, default='')
+parser.add_argument('--benchmark_frames',   type=int, default=10)
 args = parser.parse_args()
 
 IS_TEST          = args.test
@@ -52,7 +51,6 @@ USE_BOX_MERGE    = args.use_box_merge
 USE_BOX_SCORE    = args.use_box_score
 DATASET_DIR      = args.dataset_root_dir
 BENCHMARK_FRAMES = args.benchmark_frames
-SPMM_VIS_FRAMES  = args.spmm_vis_frames
 FEAT_DIM         = 300
 N_RUNS           = 5
 
@@ -92,8 +90,6 @@ else:
 NUM_TEST_SAMPLE = min(BENCHMARK_FRAMES, dataset.num_files)
 NUM_CLASSES     = dataset.num_classes
 
-
-# ── Graph generate function — assigned ONCE, used everywhere ──────────────────
 graph_generate_fn = get_graph_generate_fn(config['graph_gen_method'])
 
 
@@ -131,7 +127,7 @@ TAXONOMY_LABELS = {
 }
 
 
-# ── Helper functions ───────────────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────────
 def classify_frame_kernels(kernel_stats):
     cat_times = defaultdict(float)
     for k in kernel_stats:
@@ -145,7 +141,6 @@ def classify_frame_kernels(kernel_stats):
                 break
         if not placed:
             cat_times['other'] += ms
-
     classified_total = sum(cat_times.values())
     cat_pcts = {
         cat: (cat_times.get(cat, 0.0) / classified_total * 100
@@ -185,18 +180,12 @@ def spmm_csr(csr_mat, X):
 
 def get_input_features(cam_rgb_points, input_features_cfg):
     attr = cam_rgb_points.attr
-    if input_features_cfg == 'irgb':
-        return attr
-    elif input_features_cfg == '0rgb':
-        return np.hstack([np.zeros((attr.shape[0], 1)), attr[:, 1:]])
-    elif input_features_cfg == '0000':
-        return np.zeros_like(attr)
-    elif input_features_cfg == 'i000':
-        return np.hstack([attr[:, [0]], np.zeros((attr.shape[0], 3))])
-    elif input_features_cfg == 'i':
-        return attr[:, [0]]
-    else:
-        return np.zeros((attr.shape[0], 1))
+    if input_features_cfg == 'irgb':   return attr
+    elif input_features_cfg == '0rgb': return np.hstack([np.zeros((attr.shape[0], 1)), attr[:, 1:]])
+    elif input_features_cfg == '0000': return np.zeros_like(attr)
+    elif input_features_cfg == 'i000': return np.hstack([attr[:, [0]], np.zeros((attr.shape[0], 3))])
+    elif input_features_cfg == 'i':    return attr[:, [0]]
+    else:                              return np.zeros((attr.shape[0], 1))
 
 
 def build_feed_dict(input_v, vertex_coord_list,
@@ -213,30 +202,21 @@ BOX_ENCODING_LEN = get_encoding_len(config['box_encoding_method'])
 box_decoding_fn  = get_box_decoding_fn(config['box_encoding_method'])
 
 if config['input_features'] in ('irgb', '0000', 'i000', '0rgb'):
-    t_initial_vertex_features = tf.placeholder(
-        dtype=tf.float32, shape=[None, 4])
+    t_initial_vertex_features = tf.placeholder(dtype=tf.float32, shape=[None, 4])
 elif config['input_features'] == 'rgb':
-    t_initial_vertex_features = tf.placeholder(
-        dtype=tf.float32, shape=[None, 3])
+    t_initial_vertex_features = tf.placeholder(dtype=tf.float32, shape=[None, 3])
 else:
-    t_initial_vertex_features = tf.placeholder(
-        dtype=tf.float32, shape=[None, 1])
+    t_initial_vertex_features = tf.placeholder(dtype=tf.float32, shape=[None, 1])
 
 num_levels = len(config['runtime_graph_gen_kwargs']['level_configs'])
 
-t_vertex_coord_list = [
-    tf.placeholder(dtype=tf.float32, shape=[None, 3])
-    for _ in range(num_levels + 1)]
-
-t_edges_list = [
-    tf.placeholder(dtype=tf.int32, shape=[None, 2])
-    for _ in range(num_levels)]
-
-t_keypoint_indices_list = [
-    tf.placeholder(dtype=tf.int32, shape=[None, 1])
-    for _ in range(num_levels)]
-
-t_is_training = tf.placeholder(dtype=tf.bool, shape=[])
+t_vertex_coord_list     = [tf.placeholder(dtype=tf.float32, shape=[None, 3])
+                            for _ in range(num_levels + 1)]
+t_edges_list            = [tf.placeholder(dtype=tf.int32,   shape=[None, 2])
+                            for _ in range(num_levels)]
+t_keypoint_indices_list = [tf.placeholder(dtype=tf.int32,   shape=[None, 1])
+                            for _ in range(num_levels)]
+t_is_training           = tf.placeholder(dtype=tf.bool, shape=[])
 
 model = get_model(config['model_name'])(
     num_classes=NUM_CLASSES,
@@ -282,23 +262,21 @@ with tf.Session(
     print(f'Restoring from checkpoint: {model_path}')
     saver.restore(sess, model_path)
 
-    # ── Warm-up (not profiled) ─────────────────────────────────────────────
-    print("Running warm-up pass (not profiled)...")
-    cam_warmup = dataset.get_cam_points_in_image_with_rgb(
+    # Warm-up
+    print("Running warm-up pass...")
+    cam_w = dataset.get_cam_points_in_image_with_rgb(
         0, config['downsample_by_voxel_size'])
-    vcl_warmup, kil_warmup, el_warmup = graph_generate_fn(
-        cam_warmup.xyz, **config['runtime_graph_gen_kwargs'])
-    iv_warmup = get_input_features(cam_warmup, config['input_features'])
-    fd_warmup = build_feed_dict(iv_warmup, vcl_warmup, kil_warmup, el_warmup)
-    sess.run(fetches, feed_dict=fd_warmup)
+    vcl_w, kil_w, el_w = graph_generate_fn(
+        cam_w.xyz, **config['runtime_graph_gen_kwargs'])
+    iv_w = get_input_features(cam_w, config['input_features'])
+    sess.run(fetches, feed_dict=build_feed_dict(iv_w, vcl_w, kil_w, el_w))
     print("Warm-up done.\n")
 
-    # ── Main profiling loop ────────────────────────────────────────────────
     for frame_idx in tqdm(range(NUM_TEST_SAMPLE), desc="Profiling frames"):
 
         rec = {'frame': frame_idx}
 
-        # ── Stage 1: Data Loading ──────────────────────────────────────────
+        # Stage 1: Data Loading
         t0 = time.perf_counter()
         cam_rgb_points = dataset.get_cam_points_in_image_with_rgb(
             frame_idx, config['downsample_by_voxel_size'])
@@ -309,7 +287,7 @@ with tf.Session(
         t1 = time.perf_counter()
         rec['t_data_loading_ms'] = (t1 - t0) * 1000
 
-        # ── Stage 2: Graph Construction ────────────────────────────────────
+        # Stage 2: Graph Construction
         t_gc0 = time.perf_counter()
         (vertex_coord_list,
          keypoint_indices_list,
@@ -319,21 +297,18 @@ with tf.Session(
         t_gc1 = time.perf_counter()
         rec['t_graph_construction_ms'] = (t_gc1 - t_gc0) * 1000
 
-        # Read sub-stage timings written by graph_gen module
         gc_downsample_ms = graph_gen._gc_timing.get('downsample_ms', 0.0)
         gc_edge_ms       = graph_gen._gc_timing.get('edge_build_ms',  0.0)
-        # FRNN is whatever time remains after the two timed sub-stages
-        gc_frnn_ms = max(0.0,
-            rec['t_graph_construction_ms'] - gc_downsample_ms - gc_edge_ms)
+        gc_frnn_ms       = max(0.0, rec['t_graph_construction_ms']
+                               - gc_downsample_ms - gc_edge_ms)
 
-        rec['gc_sparse_ms']     = gc_frnn_ms        # FRNN = sparse neighbor search
-        rec['gc_memory_ms']     = gc_edge_ms         # edge list build = memory ops
-        rec['gc_dense_ms']      = gc_downsample_ms   # voxel grid = dense spatial hash
+        rec['gc_sparse_ms']     = gc_frnn_ms
+        rec['gc_memory_ms']     = gc_edge_ms
+        rec['gc_dense_ms']      = gc_downsample_ms
         rec['gc_frnn_ms']       = gc_frnn_ms
         rec['gc_edge_build_ms'] = gc_edge_ms
         rec['gc_downsample_ms'] = gc_downsample_ms
 
-        # Graph structure stats
         edges_f = edges_list[1]
         num_v_f = vertex_coord_list[1].shape[0]
         num_e_f = edges_f.shape[0]
@@ -341,7 +316,7 @@ with tf.Session(
         rec['num_vertices'] = num_v_f
         rec['num_edges']    = num_e_f
 
-        # ── Stage 2b: SpMM benchmark ───────────────────────────────────────
+        # Stage 2b: SpMM benchmark — CPU wall-clock only
         np.random.seed(frame_idx)
         X_f     = np.random.randn(num_v_f, FEAT_DIM).astype(np.float32)
         A_coo_f = build_a_sel(src_f, num_e_f, num_v_f)
@@ -377,7 +352,7 @@ with tf.Session(
             'csr_match':    csr_match,
         })
 
-        # ── Stage 3: GNN Inference ─────────────────────────────────────────
+        # Stage 3: GNN Inference — FULL_TRACE every frame
         input_v   = get_input_features(cam_rgb_points, config['input_features'])
         feed_dict = build_feed_dict(
             input_v, vertex_coord_list, keypoint_indices_list, edges_list)
@@ -403,7 +378,7 @@ with tf.Session(
             rec[f'gnn_pct_{cat}'] = frame_classification['pcts'][cat]
         rec['gnn_total_classified_ms'] = frame_classification['total']
 
-        # ── Stage 4: Post-processing ───────────────────────────────────────
+        # Stage 4: Post-processing
         if config['label_method'] == 'yaw':
             label_map = {'Background':0,'Car':1,'Pedestrian':3,
                          'Cyclist':5,'DontCare':7}
@@ -414,7 +389,6 @@ with tf.Session(
                          'Cyclist':3,'DontCare':5}
 
         t6 = time.perf_counter()
-
         box_probs  = results['probs']
         box_labels = np.tile(
             np.expand_dims(np.arange(NUM_CLASSES), axis=0),
@@ -466,12 +440,10 @@ with tf.Session(
         rec['t_nms_ms'] = (t_n1 - t_n0) * 1000
 
         t7 = time.perf_counter()
-        rec['t_post_ms'] = (t7 - t6) * 1000
-
+        rec['t_post_ms']      = (t7 - t6) * 1000
         rec['post_dense_ms']  = rec['t_box_decode_ms']
         rec['post_memory_ms'] = rec['t_filter_ms']
         rec['post_other_ms']  = rec['t_nms_ms']
-
         rec['t_end_to_end_ms'] = (
             rec['t_data_loading_ms']
             + rec['t_graph_construction_ms']
@@ -496,10 +468,10 @@ spmm_df = pd.DataFrame(spmm_records)
 
 # ── Terminal summary ───────────────────────────────────────────────────────────
 print(f"\n{'='*65}")
-print(f"  FULL SYSTEM BENCHMARK SUMMARY — {NUM_TEST_SAMPLE} frames")
+print(f"  FULL SYSTEM BENCHMARK — {NUM_TEST_SAMPLE} frames")
 print(f"{'='*65}")
 
-print(f"\n  Stage timing (mean across {NUM_TEST_SAMPLE} frames):")
+print(f"\n  Stage timing (mean):")
 print(f"  {'Stage':<30} {'Mean (ms)':>10}")
 print(f"  {'─'*42}")
 for col, label in [
@@ -512,17 +484,14 @@ for col, label in [
     print(f"  {label:<30} {df[col].mean():>10.1f}")
 
 print(f"\n  Graph Construction sub-stages (mean):")
-print(f"  {'Sub-stage':<28} {'Mean (ms)':>10}")
-print(f"  {'─'*40}")
 for col, label in [
-    ('gc_frnn_ms',       'FRNN search  (→ sparse)'),
-    ('gc_edge_build_ms', 'Edge build   (→ memory)'),
-    ('gc_downsample_ms', 'Voxel sample (→ dense)'),
+    ('gc_frnn_ms',       'FRNN search  (sparse)'),
+    ('gc_edge_build_ms', 'Edge build   (memory)'),
+    ('gc_downsample_ms', 'Voxel sample (dense)'),
 ]:
     print(f"  {label:<28} {df[col].mean():>10.1f}")
 
-print(f"\n  GNN Kernel Classification "
-      f"(mean % across {NUM_TEST_SAMPLE} frames):")
+print(f"\n  GNN Kernel Classification (mean % across all frames):")
 print(f"  {'Category':<15} {'Mean %':>10} {'Mean ms':>10}")
 print(f"  {'─'*37}")
 for cat in TAXONOMY:
@@ -530,8 +499,9 @@ for cat in TAXONOMY:
           f"{df[f'gnn_{cat}_ms'].mean():>10.1f}")
 
 all_match = spmm_df['coo_match'].all() and spmm_df['csr_match'].all()
-print(f"\n  SpMM match all frames: {'YES ✓' if all_match else 'FAILURES ✗'}")
-print(f"  SpMM timing (mean, feat_dim={FEAT_DIM}, {N_RUNS} runs/frame):")
+print(f"\n  SpMM numerical match all frames: "
+      f"{'YES ✓' if all_match else 'FAILURES ✗'}")
+print(f"  SpMM mean timing (feat_dim={FEAT_DIM}, {N_RUNS} runs/frame):")
 print(f"    tf.gather : {spmm_df['gather_mean'].mean():.3f} ms")
 print(f"    SpMM COO  : {spmm_df['coo_mean'].mean():.3f} ms")
 print(f"    SpMM CSR  : {spmm_df['csr_mean'].mean():.3f} ms")
@@ -544,73 +514,52 @@ for rank, (label, ms) in enumerate(sorted([
     ('GNN Inference',      df['t_gnn_ms'].mean()),
     ('Post-processing',    df['t_post_ms'].mean()),
 ], key=lambda x: x[1], reverse=True), 1):
-    print(f"    #{rank}  {label:<25} {ms:>8.1f} ms  "
-          f"({ms / total_ms * 100:.1f}% of end-to-end)")
+    print(f"    #{rank}  {label:<25} {ms:>8.1f} ms "
+          f"({ms/total_ms*100:.1f}%)")
 
 # ── Save CSVs ──────────────────────────────────────────────────────────────────
-df.to_csv(os.path.join(OUTPUT_DIR, 'benchmark_full.csv'), index=False)
+df.to_csv(os.path.join(OUTPUT_DIR, 'benchmark_full.csv'),  index=False)
 spmm_df.to_csv(os.path.join(OUTPUT_DIR, 'benchmark_spmm.csv'), index=False)
-print(f"\n  CSVs saved to {OUTPUT_DIR}")
+print(f"\n  CSVs → {OUTPUT_DIR}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PLOT 1 — GNN Kernel Classification
+#  PLOT 1 — GNN Kernel Classification (mean bar only)
 # ══════════════════════════════════════════════════════════════════════════════
-cats     = list(TAXONOMY.keys())
-frames_x = df['frame'].values
+cats = list(TAXONOMY.keys())
 
-fig1, (ax1a, ax1b) = plt.subplots(1, 2, figsize=(16, 6))
+fig1, ax1 = plt.subplots(figsize=(8, 6))
 fig1.suptitle(
-    'GNN Inference — Kernel Classification Per Frame\n'
-    f'{NUM_TEST_SAMPLE} frames | FULL_TRACE every frame | CPU wall-clock',
+    'GNN Inference — Kernel Classification\n'
+    f'Mean across {NUM_TEST_SAMPLE} frames | FULL_TRACE every frame',
     fontsize=13, fontweight='bold')
 
-bottom = np.zeros(len(df))
-for cat in cats:
-    vals = df[f'gnn_pct_{cat}'].values
-    ax1a.bar(frames_x, vals, bottom=bottom,
-             color=TAXONOMY_COLORS[cat], label=TAXONOMY_LABELS[cat],
-             width=0.7, edgecolor='none')
-    bottom += vals
-ax1a.set_xlabel('Frame index', fontsize=11)
-ax1a.set_ylabel('% of kernel time', fontsize=11)
-ax1a.set_title('Per-frame breakdown', fontsize=10, fontweight='bold')
-ax1a.legend(fontsize=9, loc='upper right')
-ax1a.set_ylim(0, 108)
-ax1a.spines[['top', 'right']].set_visible(False)
-
 mean_pcts = [df[f'gnn_pct_{cat}'].mean() for cat in cats]
-bars1b = ax1b.bar(range(len(cats)), mean_pcts,
-                   color=[TAXONOMY_COLORS[c] for c in cats],
-                   edgecolor='black', linewidth=0.8, width=0.5)
-for bar, pct in zip(bars1b, mean_pcts):
-    ax1b.text(bar.get_x() + bar.get_width() / 2,
-              bar.get_height() + 0.5, f'{pct:.1f}%',
-              ha='center', va='bottom', fontsize=11, fontweight='bold')
-ax1b.set_xticks(range(len(cats)))
-ax1b.set_xticklabels([TAXONOMY_LABELS[c] for c in cats], fontsize=9)
-ax1b.set_ylabel('Mean % of kernel time', fontsize=11)
-ax1b.set_title(f'Mean across {NUM_TEST_SAMPLE} frames',
-               fontsize=10, fontweight='bold')
-ax1b.set_ylim(0, max(mean_pcts) * 1.3)
-ax1b.spines[['top', 'right']].set_visible(False)
+bars1 = ax1.bar(range(len(cats)), mean_pcts,
+                color=[TAXONOMY_COLORS[c] for c in cats],
+                edgecolor='black', linewidth=0.8, width=0.5)
+for bar, pct in zip(bars1, mean_pcts):
+    ax1.text(bar.get_x() + bar.get_width() / 2,
+             bar.get_height() + 0.5,
+             f'{pct:.1f}%',
+             ha='center', va='bottom',
+             fontsize=12, fontweight='bold')
+ax1.set_xticks(range(len(cats)))
+ax1.set_xticklabels([TAXONOMY_LABELS[c] for c in cats], fontsize=10)
+ax1.set_ylabel('Mean % of kernel time', fontsize=12)
+ax1.set_ylim(0, max(mean_pcts) * 1.25)
+ax1.spines[['top', 'right']].set_visible(False)
 
 plt.tight_layout()
 p1 = os.path.join(OUTPUT_DIR, 'gnn_kernel_classification.png')
 plt.savefig(p1, dpi=150, bbox_inches='tight')
-plt.show()
+plt.close()
 print(f"  Plot 1 → {p1}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PLOT 2 — Full System Classification
+#  PLOT 2 — Full System Classification (mean bar only)
 # ══════════════════════════════════════════════════════════════════════════════
-fig2, (ax2a, ax2b) = plt.subplots(1, 2, figsize=(16, 6))
-fig2.suptitle(
-    'Full Pipeline Classification — Sparse / Dense / Memory / Other\n'
-    'Data Loading + Graph Construction + GNN + Post-processing',
-    fontsize=13, fontweight='bold')
-
 sys_sparse = df['gnn_sparse_ms'] + df['gc_sparse_ms']
 sys_dense  = df['gnn_dense_ms']  + df['gc_dense_ms']  + df['post_dense_ms']
 sys_memory = (df['gnn_memory_ms'] + df['gc_memory_ms']
@@ -618,224 +567,79 @@ sys_memory = (df['gnn_memory_ms'] + df['gc_memory_ms']
 sys_other  = df['gnn_other_ms']  + df['post_other_ms']
 sys_total  = sys_sparse + sys_dense + sys_memory + sys_other
 
-sys_pcts = {
-    'sparse': sys_sparse / sys_total * 100,
-    'dense':  sys_dense  / sys_total * 100,
-    'memory': sys_memory / sys_total * 100,
-    'other':  sys_other  / sys_total * 100,
-}
+sys_mean_pcts = [
+    (sys_sparse / sys_total * 100).mean(),
+    (sys_dense  / sys_total * 100).mean(),
+    (sys_memory / sys_total * 100).mean(),
+    (sys_other  / sys_total * 100).mean(),
+]
 
-bottom2 = np.zeros(len(df))
-for cat in cats:
-    ax2a.bar(frames_x, sys_pcts[cat].values, bottom=bottom2,
-             color=TAXONOMY_COLORS[cat], label=TAXONOMY_LABELS[cat],
-             width=0.7, edgecolor='none')
-    bottom2 += sys_pcts[cat].values
-ax2a.set_xlabel('Frame index', fontsize=11)
-ax2a.set_ylabel('% of total pipeline time', fontsize=11)
-ax2a.set_title('Per-frame system breakdown\n(all stages combined)',
-               fontsize=10, fontweight='bold')
-ax2a.legend(fontsize=9, loc='upper right')
-ax2a.set_ylim(0, 108)
-ax2a.spines[['top', 'right']].set_visible(False)
+fig2, ax2 = plt.subplots(figsize=(8, 6))
+fig2.suptitle(
+    'Full Pipeline Classification\n'
+    f'Mean across {NUM_TEST_SAMPLE} frames | '
+    'Graph Construction + GNN + Post-processing',
+    fontsize=13, fontweight='bold')
 
-sys_means = [sys_pcts[cat].mean() for cat in cats]
-bars2b = ax2b.bar(range(4), sys_means,
-                   color=[TAXONOMY_COLORS[c] for c in cats],
-                   edgecolor='black', linewidth=0.8, width=0.5)
-for bar, pct in zip(bars2b, sys_means):
-    ax2b.text(bar.get_x() + bar.get_width() / 2,
-              bar.get_height() + 0.5, f'{pct:.1f}%',
-              ha='center', va='bottom', fontsize=11, fontweight='bold')
-ax2b.set_xticks(range(4))
-ax2b.set_xticklabels([TAXONOMY_LABELS[c] for c in cats], fontsize=9)
-ax2b.set_ylabel('Mean % of pipeline time', fontsize=11)
-ax2b.set_title('Mean system-level breakdown', fontsize=10, fontweight='bold')
-ax2b.set_ylim(0, max(sys_means) * 1.3)
-ax2b.spines[['top', 'right']].set_visible(False)
+bars2 = ax2.bar(range(4), sys_mean_pcts,
+                color=[TAXONOMY_COLORS[c] for c in cats],
+                edgecolor='black', linewidth=0.8, width=0.5)
+for bar, pct in zip(bars2, sys_mean_pcts):
+    ax2.text(bar.get_x() + bar.get_width() / 2,
+             bar.get_height() + 0.5,
+             f'{pct:.1f}%',
+             ha='center', va='bottom',
+             fontsize=12, fontweight='bold')
+ax2.set_xticks(range(4))
+ax2.set_xticklabels([TAXONOMY_LABELS[c] for c in cats], fontsize=10)
+ax2.set_ylabel('Mean % of pipeline time', fontsize=12)
+ax2.set_ylim(0, max(sys_mean_pcts) * 1.25)
+ax2.spines[['top', 'right']].set_visible(False)
 
 plt.tight_layout()
 p2 = os.path.join(OUTPUT_DIR, 'system_classification.png')
 plt.savefig(p2, dpi=150, bbox_inches='tight')
-plt.show()
+plt.close()
 print(f"  Plot 2 → {p2}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PLOT 3 — SpMM Comparison
+#  PLOT 3 — SpMM Comparison (mean bar only)
 # ══════════════════════════════════════════════════════════════════════════════
-fig3, (ax3a, ax3b) = plt.subplots(1, 2, figsize=(16, 6))
+fig3, ax3 = plt.subplots(figsize=(8, 6))
 fig3.suptitle(
     'SpMM Implementation Comparison\n'
-    f'tf.gather vs COO vs CSR — {NUM_TEST_SAMPLE} frames | '
-    f'CPU wall-clock | feat_dim={FEAT_DIM} | '
+    f'Mean across {NUM_TEST_SAMPLE} frames | feat_dim={FEAT_DIM} | '
     f'{"All frames match ✓" if all_match else "Mismatch ✗"}',
     fontsize=13, fontweight='bold')
 
-ax3a.plot(spmm_df['frame'], spmm_df['gather_mean'],
-          'o-', color='#2196F3', lw=2, ms=5, label='tf.gather')
-ax3a.plot(spmm_df['frame'], spmm_df['coo_mean'],
-          's-', color='#FF8C00', lw=2, ms=5, label='SpMM COO')
-ax3a.plot(spmm_df['frame'], spmm_df['csr_mean'],
-          '^-', color='#4CAF50', lw=2, ms=5, label='SpMM CSR')
-ax3a.set_xlabel('Frame index', fontsize=11)
-ax3a.set_ylabel('Mean time (ms)', fontsize=11)
-ax3a.set_title(f'Per-frame timing (mean over {N_RUNS} runs)',
-               fontsize=10, fontweight='bold')
-ax3a.legend(fontsize=10)
-ax3a.spines[['top', 'right']].set_visible(False)
+means3  = [spmm_df['gather_mean'].mean(),
+           spmm_df['coo_mean'].mean(),
+           spmm_df['csr_mean'].mean()]
+colors3 = ['#2196F3', '#FF8C00', '#4CAF50']
+labels3 = ['tf.gather\n(TF kernel)',
+           'SpMM COO\n(numpy)',
+           'SpMM CSR\n(scipy)']
 
-means3 = [spmm_df['gather_mean'].mean(),
-          spmm_df['coo_mean'].mean(),
-          spmm_df['csr_mean'].mean()]
-bars3b = ax3b.bar(range(3), means3,
-                   color=['#2196F3', '#FF8C00', '#4CAF50'],
-                   edgecolor='black', linewidth=0.7, width=0.45)
-for bar, mean in zip(bars3b, means3):
-    ax3b.text(bar.get_x() + bar.get_width() / 2,
-              bar.get_height() + max(means3) * 0.02,
-              f'{mean:.3f} ms', ha='center', va='bottom',
-              fontsize=10, fontweight='bold')
-ax3b.set_xticks(range(3))
-ax3b.set_xticklabels(
-    ['tf.gather\n(TF kernel)', 'SpMM COO\n(numpy)', 'SpMM CSR\n(scipy)'],
-    fontsize=9)
-ax3b.set_ylabel('Mean time (ms)', fontsize=11)
-ax3b.set_title(f'Overall mean — {NUM_TEST_SAMPLE} frames',
-               fontsize=10, fontweight='bold')
-ax3b.set_ylim(0, max(means3) * 1.3)
-ax3b.spines[['top', 'right']].set_visible(False)
+bars3 = ax3.bar(range(3), means3,
+                color=colors3,
+                edgecolor='black', linewidth=0.7, width=0.45)
+for bar, mean in zip(bars3, means3):
+    ax3.text(bar.get_x() + bar.get_width() / 2,
+             bar.get_height() + max(means3) * 0.02,
+             f'{mean:.1f} ms',
+             ha='center', va='bottom',
+             fontsize=12, fontweight='bold')
+ax3.set_xticks(range(3))
+ax3.set_xticklabels(labels3, fontsize=10)
+ax3.set_ylabel('Mean time (ms)', fontsize=12)
+ax3.set_ylim(0, max(means3) * 1.25)
+ax3.spines[['top', 'right']].set_visible(False)
 
 plt.tight_layout()
 p3 = os.path.join(OUTPUT_DIR, 'spmm_comparison.png')
 plt.savefig(p3, dpi=150, bbox_inches='tight')
-plt.show()
+plt.close()
 print(f"  Plot 3 → {p3}")
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  PLOT 4 — COO/CSR Structure Visualization
-# ══════════════════════════════════════════════════════════════════════════════
-vis_n = min(SPMM_VIS_FRAMES, len(spmm_records))
-fig4, big_ax = plt.subplots(vis_n, 4, figsize=(20, 4 * vis_n))
-fig4.suptitle(
-    f'COO and CSR Structure — First {vis_n} Frames\n'
-    'A_sel[e, src[e]] = 1  →  tf.gather(X, src) ≡ A_sel × X',
-    fontsize=13, fontweight='bold')
-
-for fi in range(vis_n):
-    rec_s    = spmm_records[fi]
-    fidx     = rec_s['frame']
-    num_e_vi = rec_s['num_edges']
-    num_v_vi = rec_s['num_vertices']
-
-    cam_vi = dataset.get_cam_points_in_image_with_rgb(
-        fidx, config['downsample_by_voxel_size'])
-    _, _, el_vi = graph_generate_fn(
-        cam_vi.xyz, **config['runtime_graph_gen_kwargs'])
-    src_vi   = el_vi[1][:, 0].astype(np.int32)
-    A_coo_vi = build_a_sel(src_vi, num_e_vi, num_v_vi)
-    A_csr_vi = A_coo_vi.tocsr()
-
-    vis_e   = min(150, num_e_vi)
-    vis_v   = min(150, num_v_vi)
-    A_small = coo_matrix(
-        (A_coo_vi.data[:vis_e],
-         (A_coo_vi.row[:vis_e],
-          np.minimum(A_coo_vi.col[:vis_e], vis_v - 1))),
-        shape=(vis_e, vis_v))
-
-    ax_row = big_ax[fi] if vis_n > 1 else big_ax
-    n_show = min(6, num_e_vi)
-
-    # Panel A: COO arrays
-    ax_row[0].axis('off')
-    ax_row[0].text(0.05, 0.95, '\n'.join([
-        f"Frame {fidx} — COO",
-        f"Shape: ({num_e_vi} × {num_v_vi})",
-        f"NNZ = {A_coo_vi.nnz}  (1 per edge)",
-        "",
-        f"row[:{n_show}]  = {A_coo_vi.row[:n_show].tolist()}",
-        f"col[:{n_show}]  = {A_coo_vi.col[:n_show].tolist()}",
-        f"data[:{n_show}] = {A_coo_vi.data[:n_show].tolist()}",
-        "",
-        "row[e] = edge index e",
-        "col[e] = src_idx[e]",
-        "Access: O(E) full scan",
-    ]), transform=ax_row[0].transAxes, va='top', ha='left',
-        fontsize=7.5, fontfamily='monospace',
-        bbox=dict(boxstyle='round', facecolor='#FFF3E0', alpha=0.9))
-    ax_row[0].set_title(f'Frame {fidx} — COO arrays',
-                        fontsize=9, fontweight='bold', color='#FF8C00')
-
-    # Panel B: spy plot
-    ax_row[1].spy(A_small, markersize=1.5, color='#FF8C00', alpha=0.8)
-    ax_row[1].set_title(
-        f'Sparsity pattern\n(first {vis_e} edges × {vis_v} verts)',
-        fontsize=8)
-    ax_row[1].set_xlabel('Vertex (col)', fontsize=7)
-    ax_row[1].set_ylabel('Edge (row)',   fontsize=7)
-    ax_row[1].tick_params(labelsize=6)
-
-    # Panel C: CSR arrays
-    nv_show = min(5, num_v_vi)
-    ax_row[2].axis('off')
-    ax_row[2].text(0.05, 0.95, '\n'.join([
-        f"Frame {fidx} — CSR",
-        f"Shape: ({num_e_vi} × {num_v_vi})",
-        f"NNZ = {A_csr_vi.nnz}",
-        "",
-        f"indptr[:{nv_show+1}] = {A_csr_vi.indptr[:nv_show+1].tolist()}",
-        f"indices[:{n_show}]   = {A_csr_vi.indices[:n_show].tolist()}",
-        f"data[:{n_show}]      = {A_csr_vi.data[:n_show].tolist()}",
-        "",
-        "Row i neighbors:",
-        "  indices[indptr[i]:indptr[i+1]]",
-        "Access: O(1) per row",
-    ]), transform=ax_row[2].transAxes, va='top', ha='left',
-        fontsize=7.5, fontfamily='monospace',
-        bbox=dict(boxstyle='round', facecolor='#E8F5E9', alpha=0.9))
-    ax_row[2].set_title(f'Frame {fidx} — CSR arrays',
-                        fontsize=9, fontweight='bold', color='#4CAF50')
-
-    # Panel D: numerical verification
-    np.random.seed(fidx)
-    Xd = np.random.randn(num_v_vi, 3).astype(np.float32)
-    Yg = Xd[src_vi[:n_show]]
-    Yc = spmm_coo(build_a_sel(src_vi[:n_show], n_show, num_v_vi), Xd)
-    Yr = spmm_csr(build_a_sel(src_vi[:n_show], n_show, num_v_vi).tocsr(), Xd)
-    mc = np.allclose(Yg, Yc, atol=1e-5)
-    mr = np.allclose(Yg, Yr, atol=1e-5)
-
-    lines_ver = [
-        f"Verification — Frame {fidx}",
-        f"X: ({num_v_vi} × 3) random features",
-        f"First {n_show} edges", "",
-        "tf.gather output X[src_idx]:"]
-    for ri in range(min(3, n_show)):
-        lines_ver.append(f"  [{ri}] {np.round(Yg[ri], 3).tolist()}")
-    lines_ver += ["", "SpMM COO output (A_sel × X):"]
-    for ri in range(min(3, n_show)):
-        lines_ver.append(f"  [{ri}] {np.round(Yc[ri], 3).tolist()}")
-    lines_ver += ["",
-                  f"{'✓ COO match' if mc else '✗ COO fail'}",
-                  f"{'✓ CSR match' if mr else '✗ CSR fail'}"]
-
-    ax_row[3].axis('off')
-    ax_row[3].text(0.05, 0.95, '\n'.join(lines_ver),
-                   transform=ax_row[3].transAxes, va='top', ha='left',
-                   fontsize=7.5, fontfamily='monospace',
-                   bbox=dict(boxstyle='round',
-                             facecolor='#E8F5E9' if (mc and mr) else '#FFEBEE',
-                             alpha=0.9))
-    ax_row[3].set_title(
-        f'{"✅ Verified" if mc and mr else "❌ Mismatch"}',
-        fontsize=9, fontweight='bold',
-        color='#2E7D32' if mc and mr else '#C62828')
-
-plt.tight_layout()
-p4 = os.path.join(OUTPUT_DIR, 'coo_csr_visualization.png')
-plt.savefig(p4, dpi=120, bbox_inches='tight')
-plt.show()
-print(f"  Plot 4 → {p4}")
 print("\nDone.\n")
